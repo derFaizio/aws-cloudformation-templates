@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Creates two S3 Website buckets as subdomain to a website. One with the website name and the other with the bare domain. The website and subdomain name is passed as a parameter. Configures the buckets for static hosting and redirection. Certificates are issued for both via DNS validation. Distribution is via CloudFront CDN. Route53 for both.
+Description: Creates two S3 Website buckets as subdomain to a website. One with the website name and the other with the bare domain. The website and subdomain name is passed as a parameter. Configures the buckets for static hosting and redirection. Certificates are issued for both via DNS validation. Distribution is via CloudFront CDN. Route53 optional for both.
 
 Parameters:
   Subdomain:
@@ -10,14 +10,26 @@ Parameters:
     Default: example.com
     Description: Please enter the website name. Bare domain only. Do not enter http/https and www
     Type: String
+  UseRoute53:
+    Default: 'true'
+    Description: Set to 'true' if domain is in Route53, 'false' if on external registrar like GoDaddy
+    Type: String
+    AllowedValues: ['true', 'false']
 Resources:
+  cloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub OAI for ${Subdomain}.${Website}
   s3BucketWWW:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub www.${Subdomain}.${Website}
-      WebsiteConfiguration:
-        ErrorDocument: error.html
-        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
   s3BucketWWWPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -28,13 +40,19 @@ Resources:
         - Action:
           - s3:GetObject
           Effect: Allow
-          Principal: '*'
+          Principal:
+            AWS: !Sub arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${cloudFrontOAI}
           Resource: !Sub arn:aws:s3:::${s3BucketWWW}/*
-          Sid: WebSiteBucketReadAccess
+          Sid: CloudFrontOAIAccess
   s3BucketBareDomain:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${Subdomain}.${Website}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       WebsiteConfiguration:
         RedirectAllRequestsTo:
           HostName: !Sub www.${Subdomain}.${Website}
@@ -42,9 +60,6 @@ Resources:
     Type: AWS::CertificateManager::Certificate
     Properties:
       DomainName: !Sub www.${Subdomain}.${Website}
-      DomainValidationOptions:
-          - DomainName: !Sub www.${Subdomain}.${Website}
-            ValidationDomain: !Sub www.${Subdomain}.${Website}
       SubjectAlternativeNames:
         - !Sub ${Subdomain}.${Website}
       ValidationMethod: DNS
@@ -59,22 +74,14 @@ Resources:
         Aliases:
           - !Sub www.${Subdomain}.${Website}
         Origins:
-          - DomainName: !Sub
-            - www.${Subdomain}.${Website}.s3-website-${stacksRegion}.amazonaws.com
-            - { stacksRegion: !Ref "AWS::Region" }
-            Id: !Sub
-              - S3-Website-www.${Subdomain}.${Website}.s3-website-${stacksRegion}.amazonaws.com
-              - { stacksRegion: !Ref "AWS::Region" }
-            CustomOriginConfig:
-              HTTPPort: '80'
-              HTTPSPort: '443'
-              OriginProtocolPolicy: 'http-only'
+          - DomainName: !GetAtt [s3BucketWWW, DomainName]
+            Id: !Sub S3-www.${Subdomain}.${Website}
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${cloudFrontOAI}
         DefaultRootObject: index.html
         DefaultCacheBehavior:
           Compress: 'true'
-          TargetOriginId: !Sub
-              - S3-Website-www.${Subdomain}.${Website}.s3-website-${stacksRegion}.amazonaws.com
-              - { stacksRegion: !Ref "AWS::Region" }
+          TargetOriginId: !Sub S3-www.${Subdomain}.${Website}
           ViewerProtocolPolicy: 'redirect-to-https'
           ForwardedValues:
             Cookies:
@@ -93,12 +100,8 @@ Resources:
         Aliases:
           - !Sub ${Subdomain}.${Website}
         Origins:
-          - DomainName: !Sub
-            - ${Subdomain}.${Website}.s3-website-${stacksRegion}.amazonaws.com
-            - { stacksRegion: !Ref "AWS::Region" }
-            Id: !Sub
-              - S3-Website-${Subdomain}.${Website}.s3-website-${stacksRegion}.amazonaws.com
-              - { stacksRegion: !Ref "AWS::Region" }
+          - DomainName: !GetAtt [s3BucketBareDomain, DomainName]
+            Id: !Sub S3-${Subdomain}.${Website}
             CustomOriginConfig:
               HTTPPort: '80'
               HTTPSPort: '443'
@@ -106,9 +109,7 @@ Resources:
         DefaultRootObject: index.html
         DefaultCacheBehavior:
           Compress: 'true'
-          TargetOriginId: !Sub
-              - S3-Website-${Subdomain}.${Website}.s3-website-${stacksRegion}.amazonaws.com
-              - { stacksRegion: !Ref "AWS::Region" }
+          TargetOriginId: !Sub S3-${Subdomain}.${Website}
           ViewerProtocolPolicy: 'allow-all'
           ForwardedValues:
             Cookies:
@@ -121,6 +122,7 @@ Resources:
           MinimumProtocolVersion: "TLSv1.2_2018"
   route53WWW:
     Type: AWS::Route53::RecordSet
+    Condition: IsRoute53
     Properties:
       Name: !Sub www.${Subdomain}.${Website}
       Type: A
@@ -131,6 +133,7 @@ Resources:
       HostedZoneName: !Sub ${Website}.
   route53BareDomain:
     Type: AWS::Route53::RecordSet
+    Condition: IsRoute53
     Properties:
       Name: !Sub ${Subdomain}.${Website}
       Type: A
@@ -139,3 +142,15 @@ Resources:
         EvaluateTargetHealth: false
         HostedZoneId: 'Z2FDTNDATAQYW2'
       HostedZoneName: !Sub ${Website}.
+Conditions:
+  IsRoute53: !Equals [!Ref UseRoute53, 'true']
+Outputs:
+  CloudFrontWWWDomain:
+    Description: CloudFront domain for www subdomain
+    Value: !GetAtt [cloudfrontWWW, DomainName]
+  CloudFrontBareDomain:
+    Description: CloudFront domain for bare domain
+    Value: !GetAtt [cloudfrontBareDomain, DomainName]
+  CertificateArn:
+    Description: ACM Certificate ARN - validate manually at your registrar
+    Value: !Ref acmWebsite

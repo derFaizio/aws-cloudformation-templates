@@ -32,5 +32,22 @@ Templates with increasing level of difficulty
 1. [createS3BucketWebsiteWithParamsBareDomainSubdomain.yaml](./createS3BucketWebsiteWithParamsBareDomainSubdomain.yaml): **createS3BucketWebsiteWithParamsBareDomain** but for subdomain buckets instead of website buckets
 1. [createS3BucketWebsiteWithParamsBareDomainSubdomainACM.yaml](./createS3BucketWebsiteWithParamsBareDomainSubdomainACM.yaml): **createS3BucketWebsiteWithParamsBareDomainSubdomain** + signed certificate via ACM
 1. [createS3BucketWebsiteWithParamsBareDomainSubdomainACMCDN.yaml](./createS3BucketWebsiteWithParamsBareDomainSubdomainACMCDN.yaml): **createS3BucketWebsiteWithParamsBareDomainSubdomainACM** + CloudFront distributions for www and bare domain
-1. [createSubdomain.yaml](./createSubdomain.yaml): **createS3BucketWebsiteWithParamsBareDomainSubdomainACM** + route53 for www and bare domain. The complete subdomain deployment.
+1. [createSubdomain.yaml](./createSubdomain.yaml): **createS3BucketWebsiteWithParamsBareDomainSubdomainACMCDN** + route53 for www and bare domain. The complete subdomain deployment.
+
+
+### ADDITIONAL HINTS
+> During the Certificate validation via ACM `Create Records in Route53` might be needed to speed up the process.
+
+> Use [SampleIndex.html](./SampleIndex.html) as index.html in the www.subdomain.website.com
+
+> After making changes to the source code `index.html` Invalidate the CloudFront Distribution using the AWS Management Console (UI)
+1. Open the CloudFront Console.
+Click on the ID of the distribution associated with your subdomain (subdomain.website.com).
+1. Select the Invalidations tab from the horizontal menu.
+1. Click the Create invalidation button.
+1. In the Object paths box, type:
+/* (to clear everything)
+OR /index.html (to clear just that file).
+1. Click Create invalidation.
+The status will show as In Progress. Once it switches to Completed (usually within 60 seconds), refresh your browser.
 
