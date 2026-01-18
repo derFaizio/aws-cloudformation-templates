@@ -51,3 +51,4 @@ OR /index.html (to clear just that file).
 1. Click Create invalidation.
 The status will show as In Progress. Once it switches to Completed (usually within 60 seconds), refresh your browser.
 
+> To add the A and AAAA records, go to the CloudFront Distribution and in the `General` tab, click `Route Domains to CloudFront`.

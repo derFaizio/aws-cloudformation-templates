@@ -73,6 +73,7 @@ Resources:
         Enabled: 'true'
         Aliases:
           - !Sub www.${Subdomain}.${Website}
+          - !Sub ${Subdomain}.${Website}
         Origins:
           - DomainName: !GetAtt [s3BucketWWW, DomainName]
             Id: !Sub S3-www.${Subdomain}.${Website}
@@ -83,34 +84,6 @@ Resources:
           Compress: 'true'
           TargetOriginId: !Sub S3-www.${Subdomain}.${Website}
           ViewerProtocolPolicy: 'redirect-to-https'
-          ForwardedValues:
-            Cookies:
-              Forward: 'none'
-            QueryString: 'false'
-        IPV6Enabled: 'true'
-        ViewerCertificate:
-          AcmCertificateArn: !Ref acmWebsite
-          SslSupportMethod: "sni-only"
-          MinimumProtocolVersion: "TLSv1.2_2018"
-  cloudfrontBareDomain:
-    Type: AWS::CloudFront::Distribution
-    Properties:
-      DistributionConfig:
-        Enabled: 'true'
-        Aliases:
-          - !Sub ${Subdomain}.${Website}
-        Origins:
-          - DomainName: !GetAtt [s3BucketBareDomain, DomainName]
-            Id: !Sub S3-${Subdomain}.${Website}
-            CustomOriginConfig:
-              HTTPPort: '80'
-              HTTPSPort: '443'
-              OriginProtocolPolicy: 'http-only'
-        DefaultRootObject: index.html
-        DefaultCacheBehavior:
-          Compress: 'true'
-          TargetOriginId: !Sub S3-${Subdomain}.${Website}
-          ViewerProtocolPolicy: 'allow-all'
           ForwardedValues:
             Cookies:
               Forward: 'none'
@@ -138,7 +111,7 @@ Resources:
       Name: !Sub ${Subdomain}.${Website}
       Type: A
       AliasTarget:
-        DNSName: !GetAtt [cloudfrontBareDomain ,DomainName]
+        DNSName: !GetAtt [cloudfrontWWW, DomainName]
         EvaluateTargetHealth: false
         HostedZoneId: 'Z2FDTNDATAQYW2'
       HostedZoneName: !Sub ${Website}.
@@ -148,9 +121,6 @@ Outputs:
   CloudFrontWWWDomain:
     Description: CloudFront domain for www subdomain
     Value: !GetAtt [cloudfrontWWW, DomainName]
-  CloudFrontBareDomain:
-    Description: CloudFront domain for bare domain
-    Value: !GetAtt [cloudfrontBareDomain, DomainName]
   CertificateArn:
     Description: ACM Certificate ARN - validate manually at your registrar
     Value: !Ref acmWebsite
